@@ -83,3 +83,82 @@ LIMIT 5;
  * Customer 12748: 224 orders
  * Customer 17841: 169 orders
  * Customer 14606: 128 orders
+ * 
+### 6. How can we segment customers into spending tiers (VIP, Regular, Casual)?
+* **Insight:** Segmenting the customer base using conditional logic reveals that while the vast majority are Casual shoppers (< $1k), there is a highly valuable core of 275 VIP customers (> $5k) who drive substantial recurring revenue. This breakdown provides targeted customer groups for future marketing and loyalty campaigns.
+```sql
+WITH CustomerSpend AS (
+    SELECT 
+        c7 AS Customer_ID,
+        SUM(c4 * c6) AS Total_Spent
+    FROM OnlineRetail
+    WHERE c7 IS NOT NULL AND c7 != '' AND c1 NOT LIKE 'C%'
+    GROUP BY c7
+)
+SELECT 
+    CASE 
+        WHEN Total_Spent > 5000 THEN 'VIP (> $5,000)'
+        WHEN Total_Spent BETWEEN 1000 AND 5000 THEN 'Regular ($1k - $5k)'
+        ELSE 'Casual (< $1k)'
+    END AS Spending_Tier,
+    COUNT(Customer_ID) AS Customer_Count
+FROM CustomerSpend
+GROUP BY Spending_Tier
+ORDER BY Customer_Count DESC;
+```
+**Results:**
+ * Casual (< $1k): 2,672 customers
+ * Regular ($1k - $5k): 1,393 customers
+ * VIP (> $5,000): 275 customers
+
+### 7. What is the repeat customer rate and how loyal is our customer base?
+* **Insight:** The repeat customer rate stands at an impressive 65.55% (out of 4,340 total customers, 2,845 have returned to make repeat purchases), indicating exceptionally high brand loyalty. Most customers do not just buy once and disappear, representing a core strength that can be leveraged to build VIP memberships or loyalty reward programs to retain this high-value customer segment.
+```sql
+WITH CustomerOrders AS (
+    SELECT 
+        c7 AS Customer_ID,
+        COUNT(DISTINCT c1) AS Order_Count
+    FROM OnlineRetail
+    WHERE c7 IS NOT NULL AND c7 != '' AND c1 NOT LIKE 'C%'
+    GROUP BY c7
+)
+SELECT 
+    SUM(CASE WHEN Order_Count > 1 THEN 1 ELSE 0 END) AS Repeat_Customers,
+    COUNT(Customer_ID) AS Total_Customers,
+    ROUND(100.0 * SUM(CASE WHEN Order_Count > 1 THEN 1 ELSE 0 END) / COUNT(Customer_ID), 2) AS Repeat_Rate_Percentage
+FROM CustomerOrders;
+```
+**Results:** 
+ * Repeat Customers: 2,845 customers
+ * Total Customers: 4,340 customers
+ * Repeat Rate Percentage: 65.55%
+
+### 8: Which products are most frequently purchased by repeat customers?
+* **Insight:** By analyzing the purchasing habits specifically of our loyal, repeat customer base, we can identify core staple items that drive retention. This helps inventory and marketing teams understand which products are essential for keeping customers coming back.
+```sql
+  SELECT 
+    c3 AS Product_Description,
+    COUNT(DISTINCT c7) AS Unique_Repeat_Buyers,
+    SUM(c4) AS Total_Quantity_Sold
+FROM OnlineRetail
+WHERE c7 IS NOT NULL 
+  AND c7 != '' 
+  AND c1 NOT LIKE 'C%'
+  AND c7 IN (
+      -- Selects only Customer_IDs that have placed more than 1 order
+      SELECT c7 
+      FROM OnlineRetail 
+      WHERE c7 IS NOT NULL AND c7 != '' AND c1 NOT LIKE 'C%'
+      GROUP BY c7 
+      HAVING COUNT(DISTINCT c1) > 1
+  )
+GROUP BY c3
+ORDER BY Unique_Repeat_Buyers DESC
+LIMIT 5;
+```
+**Results:** 
+ * REGENCY CAKESTAND 3 TIER: 741 unique repeat buyers (11,802 total units sold)
+ * WHITE HANGING HEART T-LIGHT HOLDER: 698 unique repeat buyers (35,190 total units sold)
+ * PARTY BUNTING: 605 unique repeat buyers (14,559 total units sold)
+ * ASSORTED COLOUR BIRD ORNAMENT: 565 unique repeat buyers (33,823 total units sold)
+ * JUMBO BAG RED RETROSPOT: 557 unique repeat buyers (44,531 total units sold)
